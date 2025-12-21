@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LAVA RUN - Pose Detection</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 100vw;
+        height: 100vh;
+        background: linear-gradient(180deg, #0a0a0a 0%, #1a0505 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: "Courier New", monospace;
+        color: #00ff88;
+        overflow: hidden;
+      }
+
+      h1 {
+        font-size: 72px;
+        margin: 0;
+        text-shadow: 0 0 20px #ff4500, 0 0 40px #ff4500;
+        letter-spacing: 8px;
+        animation: pulse 2s infinite;
+      }
+
+      .menu,
+      .game-over {
+        text-align: center;
+      }
+
+      .instructions {
+        margin-top: 40px;
+        font-size: 18px;
+        line-height: 2;
+        color: #00ff88;
+      }
+
+      .instructions p {
+        margin: 10px 0;
+      }
+
+      .subtitle {
+        font-size: 24px;
+        margin-top: 30px;
+        color: #ff8800;
+      }
+
+      button {
+        margin-top: 50px;
+        padding: 20px 60px;
+        font-size: 32px;
+        background: linear-gradient(45deg, #ff4500, #ff6b00);
+        color: #fff;
+        border: 3px solid #00ff88;
+        border-radius: 0;
+        cursor: pointer;
+        font-family: "Courier New", monospace;
+        font-weight: bold;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 0 20px #ff4500, 0 0 40px #ff4500;
+        transition: all 0.3s;
+      }
+
+      button:hover {
+        transform: scale(1.1);
+        box-shadow: 0 0 30px #ff4500, 0 0 60px #ff4500;
+      }
+
+      button:disabled {
+        background: #333;
+        cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
+      }
+
+      #gameCanvas {
+        border: 4px solid #00ff88;
+        box-shadow: 0 0 30px #00ff88, inset 0 0 30px rgba(0, 255, 136, 0.1);
+        display: none;
+      }
+
+      #webcam {
+        display: none;
+      }
+
+      .score-display {
+        font-size: 48px;
+        margin-top: 30px;
+        color: #00ff88;
+      }
+
+      .high-score {
+        font-size: 32px;
+        color: #ff8800;
+        text-shadow: 0 0 15px #ff8800;
+        animation: pulse 1s infinite;
+      }
+
+      .game-over h1 {
+        color: #ff0066;
+        text-shadow: 0 0 20px #ff0066, 0 0 40px #ff0066;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+
+      .loading {
+        font-size: 18px;
+        color: #ff8800;
+        margin-top: 20px;
+      }
+
+      .calibration-text {
+        font-size: 36px;
+        color: #ff8800;
+        text-shadow: 0 0 20px #ff8800;
+      }
+
+      .player-out {
+        position: absolute;
+        font-size: 24px;
+        padding: 10px 20px;
+        background: rgba(0, 0, 0, 0.8);
+        border-radius: 5px;
+        animation: fadeOut 2s forwards;
+      }
+
+      @keyframes fadeOut {
+        0% {
+          opacity: 1;
+        }
+        70% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <video id="webcam" width="640" height="480" autoplay playsinline></video>
+
+    <div id="menu" class="menu">
+      <h1>LAVA RUN</h1>
+      <p class="subtitle">Styrs med MediaPipe Pose Detection!</p>
+      <div class="instructions">
+        <p>HOPPA: Hoppa på riktigt!</p>
+        <p>DUCKA: Böj dig ner / sätt dig på huk</p>
+        <p>1-2 spelare stöds!</p>
+      </div>
+      <p class="loading" id="loadingText">Laddar AI-modell...</p>
+      <button id="startBtn" onclick="startGame()" disabled>VÄNTAR...</button>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <div id="gameOver" class="game-over hidden">
+      <h1>GAME OVER</h1>
+      <p class="score-display">SCORE: <span id="finalScore">0</span></p>
+      <p id="newRecord" class="high-score hidden">NYTT REKORD!</p>
+      <button onclick="startGame()">SPELA IGEN</button>
+    </div>
+
+    <script type="module">
+      import {
+        PoseLandmarker,
+        FilesetResolver,
+      } from "https://cdn.skypack.dev/@mediapipe/tasks-vision@0.10.0";
+
+      const video = document.getElementById("webcam");
+      const gameCanvas = document.getElementById("gameCanvas");
+      const gameCtx = gameCanvas.getContext("2d");
+
+      let poseLandmarker = null;
+      let gameState = "menu"; // menu, calibrating, playing, gameOver
+      let score = 0;
+      let highScore = 0;
+      let cameraReady = false;
+      let animationId = null;
+      let poseDetectionInterval = null;
+      let lastPoseTime = 0;
+
+      // Calibration
+      let calibrationFrames = 0;
+      const CALIBRATION_DURATION = 60; // ~2 seconds at 30fps
+      let calibrationCountdown = 3;
+      let countdownTimer = null;
+
+      // Player colors
+      const PLAYER_COLORS = ["#00ff88", "#ff00ff"];
+      const PLAYER_OFFSETS = [-30, 30];
+
+      // Players array - supports 1-2 players
+      let players = [];
+
+      // Smoothing factor (0-1, lower = smoother but more lag)
+      const SMOOTHING_FACTOR = 0.4;
+      const LIMB_SMOOTHING_FACTOR = 0.3;
+
+      function createPlayer(id) {
+        return {
+          id: id,
+          color: PLAYER_COLORS[id],
+          offsetX: PLAYER_OFFSETS[id],
+          landmarks: null,
+          smoothedLandmarks: null,
+          limbLengths: null, // Store averaged limb lengths
+          history: {
+            shoulderYSamples: [],
+            torsoLengthSamples: [], // For calibrating duck detection
+            baselineY: null,
+            baselineTorsoLength: null, // Calibrated torso length
+            bodyScale: null, // Scale factor based on body size
+            lastShoulderY: null,
+            velocity: 0,
+            canJump: true,
+          },
+          gameState: {
+            y: 0,
+            jumpVelocity: 0,
+            isDucking: false,
+            alive: true,
+          },
+          score: 0,
+        };
+      }
+
+      // Smooth landmarks using exponential moving average
+      function smoothLandmarks(player, newLandmarks) {
+        if (!player.smoothedLandmarks) {
+          // First frame - initialize with current landmarks
+          player.smoothedLandmarks = newLandmarks.map((lm) => ({
+            x: lm.x,
+            y: lm.y,
+            z: lm.z,
+          }));
+          return player.smoothedLandmarks;
+        }
+
+        // Blend new landmarks with previous smoothed values
+        for (let i = 0; i < newLandmarks.length; i++) {
+          player.smoothedLandmarks[i].x =
+            player.smoothedLandmarks[i].x * (1 - SMOOTHING_FACTOR) +
+            newLandmarks[i].x * SMOOTHING_FACTOR;
+          player.smoothedLandmarks[i].y =
+            player.smoothedLandmarks[i].y * (1 - SMOOTHING_FACTOR) +
+            newLandmarks[i].y * SMOOTHING_FACTOR;
+          player.smoothedLandmarks[i].z =
+            player.smoothedLandmarks[i].z * (1 - SMOOTHING_FACTOR) +
+            newLandmarks[i].z * SMOOTHING_FACTOR;
+        }
+
+        return player.smoothedLandmarks;
+      }
+
+      // Calculate distance between two landmarks
+      function limbLength(lm1, lm2) {
+        const dx = lm2.x - lm1.x;
+        const dy = lm2.y - lm1.y;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // Smooth limb lengths to prevent stretching/shrinking
+      function smoothLimbLengths(player, landmarks) {
+        const currentLengths = {
+          leftUpperArm: limbLength(landmarks[11], landmarks[13]),
+          leftLowerArm: limbLength(landmarks[13], landmarks[15]),
+          rightUpperArm: limbLength(landmarks[12], landmarks[14]),
+          rightLowerArm: limbLength(landmarks[14], landmarks[16]),
+          leftUpperLeg: limbLength(landmarks[23], landmarks[25]),
+          leftLowerLeg: limbLength(landmarks[25], landmarks[27]),
+          rightUpperLeg: limbLength(landmarks[24], landmarks[26]),
+          rightLowerLeg: limbLength(landmarks[26], landmarks[28]),
+          torso: limbLength(
+            {
+              x: (landmarks[11].x + landmarks[12].x) / 2,
+              y: (landmarks[11].y + landmarks[12].y) / 2,
+            },
+            {
+              x: (landmarks[23].x + landmarks[24].x) / 2,
+              y: (landmarks[23].y + landmarks[24].y) / 2,
+            }
+          ),
+        };
+
+        if (!player.limbLengths) {
+          player.limbLengths = currentLengths;
+          return player.limbLengths;
+        }
+
+        // Smooth each limb length
+        for (const key in currentLengths) {
+          player.limbLengths[key] =
+            player.limbLengths[key] * (1 - LIMB_SMOOTHING_FACTOR) +
+            currentLengths[key] * LIMB_SMOOTHING_FACTOR;
+        }
+
+        return player.limbLengths;
+      }
+
+      // Game data
+      const gameData = {
+        obstacles: [],
+        speed: 3,
+        frameCount: 0,
+        groundLevel: 340,
+        baseX: 150,
+        lastFrameTime: 0,
+        targetFPS: 60,
+        deltaTime: 1, // Normalized delta (1 = perfect 60fps frame)
+      };
+
+      // Initialize MediaPipe Pose Landmarker
+      async function initPoseLandmarker() {
+        try {
+          const vision = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+          );
+          poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath:
+                "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+              delegate: "GPU",
+            },
+            runningMode: "VIDEO",
+            numPoses: 2, // Support up to 2 players
+          });
+          document.getElementById("loadingText").textContent =
+            "AI-modell laddad!";
+          return true;
+        } catch (err) {
+          console.error("Pose landmarker error:", err);
+          document.getElementById("loadingText").textContent =
+            "Kunde inte ladda AI-modell";
+          return false;
+        }
+      }
+
+      // Initialize camera
+      async function initCamera() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480, facingMode: "user" },
+          });
+          video.srcObject = stream;
+          await new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+              video.play();
+              resolve();
+            };
+          });
+          cameraReady = true;
+          return true;
+        } catch (err) {
+          console.error("Camera error:", err);
+          alert("Kameran krävs för att spela!");
+          return false;
+        }
+      }
+
+      // Detect poses and assign to players
+      function detectPose() {
+        if (!poseLandmarker || !video) return;
+        if (gameState !== "calibrating" && gameState !== "playing") return;
+
+        const nowMs = performance.now();
+        if (nowMs - lastPoseTime < 33) return; // ~30fps
+        lastPoseTime = nowMs;
+
+        poseLandmarker.detectForVideo(video, nowMs, (result) => {
+          if (result.landmarks && result.landmarks.length > 0) {
+            // Sort poses left-to-right by hip X position
+            const sortedLandmarks = [...result.landmarks].sort((a, b) => {
+              const hipXA = (a[23].x + a[24].x) / 2;
+              const hipXB = (b[23].x + b[24].x) / 2;
+              return hipXA - hipXB;
+            });
+
+            // Assign landmarks to players
+            const detectedCount = Math.min(sortedLandmarks.length, 2);
+
+            // During calibration: adjust player count to match detected poses
+            if (gameState === "calibrating") {
+              // Create players if needed
+              while (players.length < detectedCount) {
+                players.push(createPlayer(players.length));
+              }
+              // Remove extra players if fewer are detected
+              while (players.length > detectedCount) {
+                players.pop();
+              }
+            }
+
+            // Update landmarks for detected players (with smoothing)
+            for (let i = 0; i < detectedCount; i++) {
+              if (players[i]) {
+                players[i].landmarks = sortedLandmarks[i];
+                // Apply smoothing for rendering
+                smoothLandmarks(players[i], sortedLandmarks[i]);
+                smoothLimbLengths(players[i], sortedLandmarks[i]);
+              }
+            }
+
+            // Process each player
+            if (gameState === "calibrating") {
+              calibratePlayers();
+            } else if (gameState === "playing") {
+              players.forEach((player) => {
+                if (player.landmarks && player.gameState.alive) {
+                  analyzePose(player);
+                }
+              });
+            }
+          }
+        });
+      }
+
+      // Calibration: collect baseline shoulder Y position and body measurements
+      function calibratePlayers() {
+        calibrationFrames++;
+
+        players.forEach((player) => {
+          if (player.landmarks) {
+            const leftShoulder = player.landmarks[11];
+            const rightShoulder = player.landmarks[12];
+            const leftHip = player.landmarks[23];
+            const rightHip = player.landmarks[24];
+            const leftAnkle = player.landmarks[27];
+            const rightAnkle = player.landmarks[28];
+            const nose = player.landmarks[0];
+
+            const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+            const hipY = (leftHip.y + rightHip.y) / 2;
+            const ankleY = (leftAnkle.y + rightAnkle.y) / 2;
+            const noseY = nose.y;
+
+            const torsoLength = hipY - shoulderY;
+            const bodyHeight = ankleY - shoulderY;
+            const headToAnkle = ankleY - noseY; // Full body height
+
+            player.history.shoulderYSamples.push(shoulderY);
+            player.history.torsoLengthSamples.push({
+              torso: torsoLength,
+              body: bodyHeight,
+              fullHeight: headToAnkle,
+            });
+          }
+        });
+
+        if (calibrationFrames >= CALIBRATION_DURATION) {
+          // Calculate baseline for each player
+          players.forEach((player) => {
+            if (player.history.shoulderYSamples.length > 0) {
+              const sum = player.history.shoulderYSamples.reduce(
+                (a, b) => a + b,
+                0
+              );
+              player.history.baselineY =
+                sum / player.history.shoulderYSamples.length;
+              player.history.lastShoulderY = player.history.baselineY;
+
+              // Calculate baseline torso length
+              const torsoSum = player.history.torsoLengthSamples.reduce(
+                (a, b) => a + b.torso,
+                0
+              );
+              player.history.baselineTorsoLength =
+                torsoSum / player.history.torsoLengthSamples.length;
+
+              // Calculate baseline full body height (head to ankle)
+              const fullHeightSum = player.history.torsoLengthSamples.reduce(
+                (a, b) => a + b.fullHeight,
+                0
+              );
+              player.history.baselineFullHeight =
+                fullHeightSum / player.history.torsoLengthSamples.length;
+
+              // Calculate body scale
+              const bodySum = player.history.torsoLengthSamples.reduce(
+                (a, b) => a + b.body,
+                0
+              );
+              const avgBodyHeight =
+                bodySum / player.history.torsoLengthSamples.length;
+              player.history.bodyScale = 120 / avgBodyHeight;
+            }
+          });
+
+          // Start countdown
+          startCountdown();
+        }
+      }
+
+      function startCountdown() {
+        gameState = "countdown";
+        calibrationCountdown = 3;
+
+        countdownTimer = setInterval(() => {
+          calibrationCountdown--;
+          if (calibrationCountdown <= 0) {
+            clearInterval(countdownTimer);
+            gameState = "playing";
+          }
+        }, 1000);
+      }
+
+      // Analyze pose for a specific player
+      function analyzePose(player) {
+        const landmarks = player.landmarks;
+        const history = player.history;
+        const state = player.gameState;
+
+        // Get key landmarks
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+
+        // Calculate positions
+        const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+        const hipY = (leftHip.y + rightHip.y) / 2;
+        const currentTorsoLength = hipY - shoulderY;
+
+        // Calculate velocity with smoothing (average of last 3 frames)
+        if (!history.velocityHistory) history.velocityHistory = [];
+        if (history.lastShoulderY !== null) {
+          const rawVelocity = history.lastShoulderY - shoulderY; // Positive = moving up
+          history.velocityHistory.push(rawVelocity);
+          if (history.velocityHistory.length > 3)
+            history.velocityHistory.shift();
+          history.velocity =
+            history.velocityHistory.reduce((a, b) => a + b, 0) /
+            history.velocityHistory.length;
+        }
+        history.lastShoulderY = shoulderY;
+
+        // JUMP DETECTION
+        // Require BOTH being above baseline AND having upward velocity
+        // This prevents accidental triggers from pose noise
+        const jumpPositionThreshold = history.baselineY * 0.93; // 7% above baseline
+        const velocityThreshold = 0.006; // Smoothed velocity threshold
+
+        if (history.canJump && state.y === 0) {
+          const isAboveThreshold = shoulderY < jumpPositionThreshold;
+          const hasUpwardVelocity = history.velocity > velocityThreshold;
+
+          // Require BOTH conditions to prevent false triggers
+          if (isAboveThreshold && hasUpwardVelocity) {
+            state.jumpVelocity = 18;
+            history.canJump = false;
+            history.lastJumpTime = performance.now();
+          }
+        }
+
+        // Reset jump - very generous conditions
+        // Either: shoulders back near baseline, OR enough time passed since jump
+        const nearBaseline = shoulderY > history.baselineY * 0.9; // 10% margin
+        const timeSinceJump = history.lastJumpTime
+          ? performance.now() - history.lastJumpTime
+          : 1000;
+        const jumpCooldownDone = timeSinceJump > 400; // 400ms cooldown
+
+        if (nearBaseline && jumpCooldownDone) {
+          history.canJump = true;
+        }
+
+        // DUCK DETECTION: Detect significant reduction in body height
+        const nose = landmarks[0];
+        const leftAnkle = landmarks[27];
+        const rightAnkle = landmarks[28];
+        const ankleY = (leftAnkle.y + rightAnkle.y) / 2;
+        const currentFullHeight = ankleY - nose.y; // Current head-to-ankle height
+
+        // Compare current height to calibrated baseline
+        const baselineHeight = history.baselineFullHeight || 0.5;
+        const heightRatio = currentFullHeight / baselineHeight;
+
+        // Duck only when there's a SIGNIFICANT reduction in height (at least 15% shorter)
+        // This prevents false triggers from normal standing variations
+        const isSignificantlyShorter = heightRatio < 0.85;
+
+        // Duck when we detect significant height reduction (not during jump)
+        state.isDucking = isSignificantlyShorter && state.y === 0;
+      }
+
+      // Stickman drawing functions
+      function drawLine(ctx, x1, y1, x2, y2, color, lineWidth = 4) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      function drawHead(ctx, x, y, radius, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawStickman(ctx, player, baseX, groundY) {
+        // Use smoothed landmarks for rendering (fall back to raw if not available)
+        const landmarks = player.smoothedLandmarks || player.landmarks;
+        const state = player.gameState;
+        const color = player.color;
+        const offsetX = player.offsetX;
+        const history = player.history;
+
+        if (!landmarks) return;
+
+        // Fixed player position - feet always on ground (minus jump height)
+        const feetY = groundY - state.y;
+        const playerX = baseX + offsetX;
+
+        // FIXED SCALE - constant size and height
+        const FIXED_SCALE = 280;
+        const FIXED_HEIGHT = 100; // Fixed stickman height (reduced to fit under high obstacles)
+
+        // Get landmark positions (normalized 0-1)
+        const nose = landmarks[0];
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
+        const leftElbow = landmarks[13];
+        const rightElbow = landmarks[14];
+        const leftWrist = landmarks[15];
+        const rightWrist = landmarks[16];
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+        const leftKnee = landmarks[25];
+        const rightKnee = landmarks[26];
+        const leftAnkle = landmarks[27];
+        const rightAnkle = landmarks[28];
+
+        // Calculate reference points
+        const ankleCenterX = (leftAnkle.x + rightAnkle.x) / 2;
+        const shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2;
+        const ankleCenterY = (leftAnkle.y + rightAnkle.y) / 2;
+        const hipCenterY = (leftHip.y + rightHip.y) / 2;
+
+        // Measure actual body height from pose
+        const actualBodyHeight = ankleCenterY - shoulderCenterY;
+
+        // Transform function: normalize to fixed height, with ducking support
+        const transform = (lm) => {
+          // Position relative to ankle center (horizontal)
+          const relX = (lm.x - ankleCenterX) * FIXED_SCALE;
+          // Position relative to ankles (vertical), normalized to fixed height
+          const normalizedY = (lm.y - ankleCenterY) / actualBodyHeight;
+          let relY = normalizedY * FIXED_HEIGHT;
+
+          // If ducking, compress the upper body (shoulders, head, arms)
+          if (state.isDucking) {
+            const isUpperBody = lm.y < hipCenterY; // Above hips
+            if (isUpperBody) {
+              // Compress upper body by 50%
+              relY = relY * 0.5;
+            }
+          }
+
+          return {
+            x: playerX + relX,
+            y: feetY + relY, // Feet at feetY, everything else scaled above
+          };
+        };
+
+        // Transform all landmarks
+        const tNose = transform(nose);
+        const tLeftShoulder = transform(leftShoulder);
+        const tRightShoulder = transform(rightShoulder);
+        const tLeftElbow = transform(leftElbow);
+        const tRightElbow = transform(rightElbow);
+        const tLeftWrist = transform(leftWrist);
+        const tRightWrist = transform(rightWrist);
+        const tLeftHip = transform(leftHip);
+        const tRightHip = transform(rightHip);
+        const tLeftKnee = transform(leftKnee);
+        const tRightKnee = transform(rightKnee);
+        const tLeftAnkle = transform(leftAnkle);
+        const tRightAnkle = transform(rightAnkle);
+
+        // Shoulder and hip centers
+        const shoulderMid = {
+          x: (tLeftShoulder.x + tRightShoulder.x) / 2,
+          y: (tLeftShoulder.y + tRightShoulder.y) / 2,
+        };
+        const hipMid = {
+          x: (tLeftHip.x + tRightHip.x) / 2,
+          y: (tLeftHip.y + tRightHip.y) / 2,
+        };
+
+        // Set glow effect
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = color;
+
+        // Draw torso (shoulder to hip)
+        drawLine(
+          ctx,
+          shoulderMid.x,
+          shoulderMid.y,
+          hipMid.x,
+          hipMid.y,
+          color,
+          5
+        );
+
+        // Draw shoulders line
+        drawLine(
+          ctx,
+          tLeftShoulder.x,
+          tLeftShoulder.y,
+          tRightShoulder.x,
+          tRightShoulder.y,
+          color,
+          4
+        );
+
+        // Draw left arm
+        drawLine(
+          ctx,
+          tLeftShoulder.x,
+          tLeftShoulder.y,
+          tLeftElbow.x,
+          tLeftElbow.y,
+          color,
+          4
+        );
+        drawLine(
+          ctx,
+          tLeftElbow.x,
+          tLeftElbow.y,
+          tLeftWrist.x,
+          tLeftWrist.y,
+          color,
+          4
+        );
+
+        // Draw right arm
+        drawLine(
+          ctx,
+          tRightShoulder.x,
+          tRightShoulder.y,
+          tRightElbow.x,
+          tRightElbow.y,
+          color,
+          4
+        );
+        drawLine(
+          ctx,
+          tRightElbow.x,
+          tRightElbow.y,
+          tRightWrist.x,
+          tRightWrist.y,
+          color,
+          4
+        );
+
+        // Draw hips line
+        drawLine(
+          ctx,
+          tLeftHip.x,
+          tLeftHip.y,
+          tRightHip.x,
+          tRightHip.y,
+          color,
+          4
+        );
+
+        // Draw left leg
+        drawLine(
+          ctx,
+          tLeftHip.x,
+          tLeftHip.y,
+          tLeftKnee.x,
+          tLeftKnee.y,
+          color,
+          4
+        );
+        drawLine(
+          ctx,
+          tLeftKnee.x,
+          tLeftKnee.y,
+          tLeftAnkle.x,
+          tLeftAnkle.y,
+          color,
+          4
+        );
+
+        // Draw right leg
+        drawLine(
+          ctx,
+          tRightHip.x,
+          tRightHip.y,
+          tRightKnee.x,
+          tRightKnee.y,
+          color,
+          4
+        );
+        drawLine(
+          ctx,
+          tRightKnee.x,
+          tRightKnee.y,
+          tRightAnkle.x,
+          tRightAnkle.y,
+          color,
+          4
+        );
+
+        // Draw head - fixed size, at nose position
+        const headRadius = 12;
+        drawHead(ctx, tNose.x, tNose.y, headRadius, color);
+
+        // Reset shadow
+        ctx.shadowBlur = 0;
+
+        // Calculate bounding box from core body positions (more forgiving)
+        // Use torso and hips for main collision, ignore extended limbs
+        const coreX = [
+          shoulderMid.x,
+          hipMid.x,
+          tNose.x,
+        ];
+        const coreY = [
+          tNose.y - headRadius,
+          shoulderMid.y,
+          hipMid.y,
+        ];
+
+        const minX = Math.min(...coreX) - 10;
+        const maxX = Math.max(...coreX) + 10;
+        const minY = Math.min(...coreY); // Top of head
+        // Bottom is raised slightly from feet for more forgiving collision
+        const maxY = feetY - 5;
+
+        // Return tighter collision box for more forgiving gameplay
+        return {
+          left: minX,
+          right: maxX,
+          top: minY + 5, // Slightly lower top
+          bottom: maxY,
+        };
+      }
+
+      // Game loop
+      function gameLoop(timestamp) {
+        // Calculate delta time for consistent speed regardless of frame rate
+        if (gameData.lastFrameTime === 0) {
+          gameData.lastFrameTime = timestamp;
+        }
+        const elapsed = timestamp - gameData.lastFrameTime;
+        gameData.lastFrameTime = timestamp;
+        // Normalize delta: 1.0 = perfect 16.67ms frame (60fps)
+        // Clamp to prevent huge jumps if tab was inactive
+        gameData.deltaTime = Math.min(elapsed / 16.67, 3);
+
+        // Background
+        gameCtx.fillStyle = "#1a0a0a";
+        gameCtx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+        // Lava gradient
+        const lavaGrad = gameCtx.createLinearGradient(
+          0,
+          gameCanvas.height - 60,
+          0,
+          gameCanvas.height
+        );
+        lavaGrad.addColorStop(0, "#ff4500");
+        lavaGrad.addColorStop(0.5, "#ff6b00");
+        lavaGrad.addColorStop(1, "#ff8800");
+        gameCtx.fillStyle = lavaGrad;
+        gameCtx.fillRect(0, gameCanvas.height - 60, gameCanvas.width, 60);
+
+        // Lava glow effect
+        gameCtx.shadowBlur = 20;
+        gameCtx.shadowColor = "#ff4500";
+        gameCtx.fillStyle = "#ff4500";
+        for (let i = 0; i < 5; i++) {
+          gameCtx.fillRect(
+            Math.random() * gameCanvas.width,
+            gameCanvas.height - 60,
+            30,
+            10
+          );
+        }
+        gameCtx.shadowBlur = 0;
+
+        // Ground line
+        gameCtx.strokeStyle = "#00ff88";
+        gameCtx.lineWidth = 3;
+        gameCtx.beginPath();
+        gameCtx.moveTo(0, gameCanvas.height - 60);
+        gameCtx.lineTo(gameCanvas.width, gameCanvas.height - 60);
+        gameCtx.stroke();
+
+        // Handle different game states
+        if (gameState === "calibrating") {
+          // Show calibration message
+          gameCtx.fillStyle = "#ff8800";
+          gameCtx.font = 'bold 32px "Courier New", monospace';
+          gameCtx.textAlign = "center";
+          gameCtx.fillText(
+            "STÅ STILL FÖR KALIBRERING...",
+            gameCanvas.width / 2,
+            gameCanvas.height / 2 - 50
+          );
+
+          // Progress bar
+          const progress = calibrationFrames / CALIBRATION_DURATION;
+          gameCtx.strokeStyle = "#00ff88";
+          gameCtx.lineWidth = 4;
+          gameCtx.strokeRect(
+            gameCanvas.width / 2 - 150,
+            gameCanvas.height / 2,
+            300,
+            30
+          );
+          gameCtx.fillStyle = "#00ff88";
+          gameCtx.fillRect(
+            gameCanvas.width / 2 - 148,
+            gameCanvas.height / 2 + 2,
+            296 * progress,
+            26
+          );
+
+          // Show detected players
+          gameCtx.font = '24px "Courier New", monospace';
+          gameCtx.fillStyle = "#00ff88";
+          gameCtx.fillText(
+            `${players.length} SPELARE DETEKTERAD${
+              players.length > 1 ? "E" : ""
+            }`,
+            gameCanvas.width / 2,
+            gameCanvas.height / 2 + 80
+          );
+
+          gameCtx.textAlign = "left";
+          animationId = requestAnimationFrame(gameLoop);
+          return;
+        }
+
+        if (gameState === "countdown") {
+          // Show countdown
+          gameCtx.fillStyle = "#ff8800";
+          gameCtx.font = 'bold 120px "Courier New", monospace';
+          gameCtx.textAlign = "center";
+          gameCtx.shadowBlur = 30;
+          gameCtx.shadowColor = "#ff8800";
+          gameCtx.fillText(
+            calibrationCountdown.toString(),
+            gameCanvas.width / 2,
+            gameCanvas.height / 2 + 40
+          );
+          gameCtx.shadowBlur = 0;
+          gameCtx.textAlign = "left";
+          animationId = requestAnimationFrame(gameLoop);
+          return;
+        }
+
+        // Update physics for each player
+        const dt = gameData.deltaTime;
+        players.forEach((player) => {
+          if (player.gameState.alive) {
+            // If ducking while in air, increase gravity but don't force instant drop
+            // This allows intentional fast-fall without breaking jumps
+            if (player.gameState.isDucking && player.gameState.y > 0) {
+              // Double gravity when ducking in air (fast fall)
+              player.gameState.jumpVelocity -= 1.4 * dt;
+            } else {
+              // Normal gravity
+              player.gameState.jumpVelocity -= 0.7 * dt;
+            }
+
+            player.gameState.y += player.gameState.jumpVelocity * dt;
+
+            if (player.gameState.y <= 0) {
+              player.gameState.y = 0;
+              player.gameState.jumpVelocity = 0;
+            }
+          }
+        });
+
+        // Draw players and get collision boxes
+        const collisionBoxes = [];
+        players.forEach((player) => {
+          if (player.gameState.alive && player.landmarks) {
+            const box = drawStickman(
+              gameCtx,
+              player,
+              gameData.baseX,
+              gameData.groundLevel
+            );
+            if (box) {
+              collisionBoxes.push({ player, box });
+              // Debug: draw bounding box
+              gameCtx.strokeStyle = player.color;
+              gameCtx.lineWidth = 1;
+              gameCtx.globalAlpha = 0.5;
+              gameCtx.strokeRect(
+                box.left,
+                box.top,
+                box.right - box.left,
+                box.bottom - box.top
+              );
+              gameCtx.globalAlpha = 1;
+
+              // Debug: show ducking status
+              if (player.gameState.isDucking) {
+                gameCtx.fillStyle = player.color;
+                gameCtx.font = '16px "Courier New", monospace';
+                gameCtx.fillText("DUCKAR!", box.left, box.top - 10);
+              }
+            }
+          }
+        });
+
+        // Spawn obstacles
+        gameData.frameCount++;
+        if (gameData.frameCount % 130 === 0) {
+          const type = Math.random() > 0.6 ? "high" : "low";
+          gameData.obstacles.push({
+            x: gameCanvas.width,
+            type: type,
+            width: 30,
+            height: 25,
+          });
+        }
+
+        // Update and draw obstacles
+        gameData.obstacles = gameData.obstacles.filter((obs) => {
+          obs.x -= gameData.speed * dt;
+
+          if (obs.x < -obs.width) return false;
+
+          // Calculate obstacle position
+          let obsBottom, obsTop;
+          if (obs.type === "low") {
+            obsBottom = gameData.groundLevel;
+            obsTop = obsBottom - obs.height;
+          } else {
+            // High obstacles: raised higher for better ducking clearance
+            // Standing player head at y=240, ducking player head at y=290
+            // Obstacle at y=230-270 gives good clearance when ducking
+            obsBottom = gameData.groundLevel - 100; // 340-70=270
+            obsTop = obsBottom - obs.height; // 270-40=230
+          }
+
+          // Draw obstacle
+          gameCtx.shadowBlur = 15;
+          gameCtx.shadowColor = "#ff0066";
+          gameCtx.fillStyle = "#ff0066";
+          gameCtx.fillRect(obs.x, obsTop, obs.width, obs.height);
+          gameCtx.shadowBlur = 0;
+
+          // Collision detection for each player
+          collisionBoxes.forEach(({ player, box }) => {
+            if (!player.gameState.alive) return;
+
+            if (obs.x < box.right && obs.x + obs.width > box.left) {
+              if (obsTop < box.bottom && obsBottom > box.top) {
+                player.gameState.alive = false;
+                showPlayerOut(player.id);
+              }
+            }
+          });
+
+          return true;
+        });
+
+        // Check if all players are dead
+        const alivePlayers = players.filter((p) => p.gameState.alive);
+        const allDead = alivePlayers.length === 0;
+
+        // Debug: show player count
+        gameCtx.fillStyle = "#666";
+        gameCtx.font = '12px "Courier New", monospace';
+        gameCtx.fillText(
+          `Players: ${players.length}, Alive: ${alivePlayers.length}`,
+          20,
+          gameCanvas.height - 10
+        );
+
+        if (allDead && players.length > 0) {
+          endGame();
+          return;
+        }
+
+        // Increase difficulty
+        if (gameData.frameCount % 300 === 0) {
+          gameData.speed += 0.3;
+        }
+
+        // Update score for alive players
+        players.forEach((player) => {
+          if (player.gameState.alive) {
+            player.score++;
+          }
+        });
+        score = Math.max(...players.map((p) => p.score));
+
+        // Score display
+        gameCtx.font = 'bold 24px "Courier New", monospace';
+
+        if (players.length === 1) {
+          // Single player: centered score
+          gameCtx.fillStyle = "#00ff88";
+          gameCtx.fillText(`SCORE: ${score}`, 20, 40);
+          gameCtx.fillText(`HIGH: ${highScore}`, 20, 70);
+        } else {
+          // Multiplayer: score per player
+          players.forEach((player, idx) => {
+            gameCtx.fillStyle = player.color;
+            const x = idx === 0 ? 20 : gameCanvas.width - 200;
+            const status = player.gameState.alive ? player.score : "UTE";
+            gameCtx.fillText(`P${idx + 1}: ${status}`, x, 40);
+          });
+          gameCtx.fillStyle = "#ff8800";
+          gameCtx.fillText(`HIGH: ${highScore}`, gameCanvas.width / 2 - 60, 40);
+        }
+
+        if (gameState === "playing") {
+          animationId = requestAnimationFrame(gameLoop);
+        }
+      }
+
+      function showPlayerOut(playerId) {
+        // Could add visual notification here
+        console.log(`Player ${playerId + 1} is out!`);
+      }
+
+      async function startGame() {
+        if (!poseLandmarker || !cameraReady) {
+          alert("Vänta medan systemet laddar...");
+          return;
+        }
+
+        // Reset game state
+        gameState = "calibrating";
+        score = 0;
+        calibrationFrames = 0;
+        players = [];
+        gameData.obstacles = [];
+        gameData.speed = 3;
+        gameData.frameCount = 0;
+        gameData.lastFrameTime = 0; // Reset for smooth start
+
+        document.getElementById("menu").classList.add("hidden");
+        document.getElementById("gameOver").classList.add("hidden");
+        document.getElementById("gameCanvas").style.display = "block";
+
+        if (poseDetectionInterval) clearInterval(poseDetectionInterval);
+        poseDetectionInterval = setInterval(detectPose, 33);
+
+        gameLoop();
+      }
+
+      function endGame() {
+        gameState = "gameOver";
+
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+        }
+        if (poseDetectionInterval) {
+          clearInterval(poseDetectionInterval);
+        }
+        if (countdownTimer) {
+          clearInterval(countdownTimer);
+        }
+
+        if (score > highScore) {
+          highScore = score;
+          document.getElementById("newRecord").classList.remove("hidden");
+        } else {
+          document.getElementById("newRecord").classList.add("hidden");
+        }
+
+        document.getElementById("finalScore").textContent = score;
+        document.getElementById("gameCanvas").style.display = "none";
+        document.getElementById("gameOver").classList.remove("hidden");
+      }
+
+      // Initialize everything
+      async function init() {
+        const poseLoaded = await initPoseLandmarker();
+        const cameraLoaded = await initCamera();
+
+        if (poseLoaded && cameraLoaded) {
+          document.getElementById("startBtn").disabled = false;
+          document.getElementById("startBtn").textContent = "START";
+        }
+      }
+
+      // Make startGame available globally
+      window.startGame = startGame;
+
+      init();
+    </script>
+  </body>
+</html>
