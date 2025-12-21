@@ -1,32 +1,74 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { GameEngine } from '@/game/GameEngine';
+import { GameCanvas } from '@/ui/GameCanvas';
+import { Menu } from '@/ui/Menu';
+import { GameOver } from '@/ui/GameOver';
+import { useCamera } from '@/hooks/useCamera';
+import { usePoseDetection } from '@/hooks/usePoseDetection';
+
 function App() {
+  const [gameState, setGameState] = useState<'menu' | 'playing' | 'gameOver'>('menu');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingText, setLoadingText] = useState('Laddar AI-modell...');
+  const [finalScore, setFinalScore] = useState(0);
+  const [isNewRecord, setIsNewRecord] = useState(false);
+  const engineRef = useRef<GameEngine>(new GameEngine());
+  const camera = useCamera();
+
+  const handleGesture = useCallback((playerId: number, gesture: { shouldJump: boolean; isDucking: boolean }) => {
+    if (gesture.shouldJump) engineRef.current.applyJump(playerId);
+    const player = engineRef.current.getPlayers().find(p => p.id === playerId);
+    if (player) player.physics.isDucking = gesture.isDucking;
+  }, []);
+
+  const handleCalibrationComplete = useCallback(() => {
+    engineRef.current.completeCalibration();
+  }, []);
+
+  const pose = usePoseDetection({
+    videoElement: camera.videoRef.current,
+    players: engineRef.current.getPlayers(),
+    isCalibrating: engineRef.current.getState() === 'calibrating',
+    isPlaying: engineRef.current.getState() === 'playing',
+    onCalibrationComplete: handleCalibrationComplete,
+    onGesture: handleGesture,
+  });
+
+  useEffect(() => {
+    const init = async () => {
+      setLoadingText('Laddar AI-modell...');
+      await pose.initialize();
+      setLoadingText('Startar kamera...');
+      await camera.initialize();
+      setLoadingText('Redo!');
+      setIsLoading(false);
+    };
+    init();
+    return () => camera.stop();
+  }, []);
+
+  const handleStart = useCallback(() => {
+    engineRef.current = new GameEngine();
+    engineRef.current.startGame();
+    engineRef.current.addPlayer(); // Add at least one player
+    pose.reset();
+    pose.startDetection();
+    setGameState('playing');
+  }, [pose]);
+
+  const handleGameOver = useCallback(() => {
+    pose.stopDetection();
+    setFinalScore(engineRef.current.getScore());
+    setIsNewRecord(engineRef.current.getScore() >= engineRef.current.getHighScore() && engineRef.current.getScore() > 0);
+    setGameState('gameOver');
+  }, [pose]);
+
   return (
-    <div className="flex flex-col items-center justify-center text-center">
-      <h1 className="text-7xl font-bold text-snow-white mb-2 pulse" style={{
-        textShadow: '0 0 20px #DC143C, 0 0 40px #DC143C, 0 0 60px #FFD700',
-        letterSpacing: '8px'
-      }}>
-        JULSPELET
-      </h1>
-      <p className="text-4xl mb-8" style={{
-        textShadow: '0 0 15px #87CEEB',
-      }}>
-        ❄️ ⛄ 🎄
-      </p>
-      <p className="text-2xl text-christmas-gold mb-4">
-        Vite + TypeScript + React Setup Complete! 🎉
-      </p>
-      <div className="text-lg text-ice-light mt-8 space-y-2">
-        <p>✅ Vite configured</p>
-        <p>✅ TypeScript strict mode enabled</p>
-        <p>✅ Tailwind CSS ready (winter theme!)</p>
-        <p>✅ Vitest configured</p>
-        <p>✅ MediaPipe installed</p>
-        <p>✅ Project structure created</p>
-      </div>
-      <div className="mt-12 text-sm text-winter-silver">
-        <p>Phase 1: Foundation & Project Setup - <span className="text-christmas-green font-bold">COMPLETE</span></p>
-        <p className="mt-2">Ready to start Phase 2: Core Types & Data Structures</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-red-950 flex flex-col items-center justify-center font-mono text-green-400">
+      <video ref={camera.videoRef} className="hidden" width={640} height={480} autoPlay playsInline />
+      {gameState === 'menu' && <Menu isLoading={isLoading} loadingText={loadingText} onStart={handleStart} />}
+      {gameState === 'playing' && <GameCanvas engine={engineRef.current} onGameOver={handleGameOver} />}
+      {gameState === 'gameOver' && <GameOver score={finalScore} isNewRecord={isNewRecord} onRestart={handleStart} />}
     </div>
   );
 }
