@@ -31,7 +31,7 @@ export class StickmanRenderer {
     ctx: CanvasRenderingContext2D,
     landmarks: PoseLandmarks,
     physics: PhysicsState,
-    calibration: CalibrationData,
+    _calibration: CalibrationData,
     baseX: number,
     color: string
   ): BoundingBox | null {

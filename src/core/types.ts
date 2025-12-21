@@ -235,16 +235,20 @@ export interface GestureConfig {
 
 /**
  * Default gesture configuration
+ * Tuned for real-world use with webcam at typical distances
  */
 export const DEFAULT_GESTURE_CONFIG: GestureConfig = {
-  jumpPositionThresholdPercent: 0.07,
-  jumpVelocityThreshold: 0.006,
+  // Jump - made more sensitive for easier triggering
+  jumpPositionThresholdPercent: 0.04, // Was 0.07, now 4% - easier to trigger
+  jumpVelocityThreshold: 0.003,       // Was 0.006, now half - more responsive
   jumpInitialVelocity: 18,
-  jumpCooldownMs: 400,
-  jumpResetThresholdPercent: 0.10,
-  duckTriggerRatio: 0.85,
-  duckReleaseRatio: 0.90,
-  duckDebounceMs: 100,
+  jumpCooldownMs: 300,                // Was 400, now 300ms - faster recovery
+  jumpResetThresholdPercent: 0.08,    // Was 0.10, now 8% - easier reset
+
+  // Duck - made more sensitive for easier triggering
+  duckTriggerRatio: 0.92,             // Was 0.85, now 92% - barely need to duck
+  duckReleaseRatio: 0.95,             // Was 0.90, now 95% - keeps hysteresis gap
+  duckDebounceMs: 50,                 // Was 100, now 50ms - more responsive
 };
 
 // ============================================================================

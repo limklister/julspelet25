@@ -1,22 +1,20 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, MutableRefObject, RefObject } from 'react';
 import { MediaPipePoseDetector } from '@/pose/MediaPipePoseDetector';
 import { LandmarkProcessor } from '@/pose/LandmarkProcessor';
 import { CalibrationService } from '@/pose/CalibrationService';
 import { GestureDetector } from '@/pose/GestureDetector';
-import { Player } from '@/core/types';
+import { GameEngine } from '@/game/GameEngine';
 
 interface UsePoseDetectionOptions {
-  videoElement: HTMLVideoElement | null;
-  players: Player[];
-  isCalibrating: boolean;
-  isPlaying: boolean;
-  onCalibrationComplete: () => void;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  engineRef: MutableRefObject<GameEngine>;
   onGesture: (playerId: number, gesture: { shouldJump: boolean; isDucking: boolean }) => void;
 }
 
 export function usePoseDetection({
-  videoElement, players, isCalibrating, isPlaying,
-  onCalibrationComplete, onGesture,
+  videoRef,
+  engineRef,
+  onGesture,
 }: UsePoseDetectionOptions) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [calibrationProgress, setCalibrationProgress] = useState(0);
@@ -25,6 +23,9 @@ export function usePoseDetection({
   const processorsRef = useRef<Map<number, LandmarkProcessor>>(new Map());
   const calibrationRef = useRef<Map<number, CalibrationService>>(new Map());
   const gestureRef = useRef<Map<number, GestureDetector>>(new Map());
+  const onGestureRef = useRef(onGesture);
+
+  useEffect(() => { onGestureRef.current = onGesture; }, [onGesture]);
 
   const initialize = useCallback(async () => {
     detectorRef.current = new MediaPipePoseDetector({ numPoses: 2 });
@@ -33,10 +34,20 @@ export function usePoseDetection({
   }, []);
 
   const startDetection = useCallback(() => {
+    const videoElement = videoRef.current;
     if (!detectorRef.current || !videoElement) return;
 
     detectorRef.current.start(videoElement, (result) => {
       if (result.poses.length === 0) return;
+
+      // Get CURRENT state from engine ref on every frame
+      const engine = engineRef.current;
+      const currentPlayers = engine.getPlayers();
+      const currentState = engine.getState();
+      const isCalibrating = currentState === 'calibrating';
+      const isPlaying = currentState === 'playing';
+
+      if (currentPlayers.length === 0) return;
 
       const sortedPoses = [...result.poses].sort((a, b) => {
         const hipXA = (a[23].x + a[24].x) / 2;
@@ -44,8 +55,8 @@ export function usePoseDetection({
         return hipXA - hipXB;
       });
 
-      for (let i = 0; i < Math.min(sortedPoses.length, players.length); i++) {
-        const player = players[i];
+      for (let i = 0; i < Math.min(sortedPoses.length, currentPlayers.length); i++) {
+        const player = currentPlayers[i];
         const landmarks = sortedPoses[i];
 
         if (!processorsRef.current.has(player.id)) {
@@ -58,14 +69,20 @@ export function usePoseDetection({
 
         if (isCalibrating) {
           if (!calibrationRef.current.has(player.id)) {
-            calibrationRef.current.set(player.id, new CalibrationService());
+            calibrationRef.current.set(player.id, new CalibrationService({
+              maxVariance: 0.01,
+            }));
           }
           const calibration = calibrationRef.current.get(player.id)!;
           const complete = calibration.addFrame(landmarks);
           setCalibrationProgress(calibration.getProgress());
           if (complete) {
             const res = calibration.finalize();
-            if (res.success && res.data) player.calibration = res.data;
+            if (res.success && res.data) {
+              player.calibration = res.data;
+            } else {
+              calibration.reset();
+            }
           }
         } else if (isPlaying && player.calibration.isCalibrated) {
           if (!gestureRef.current.has(player.id)) {
@@ -73,16 +90,18 @@ export function usePoseDetection({
           }
           const detector = gestureRef.current.get(player.id)!;
           const gesture = detector.detect(landmarks, player.calibration, player.physics);
-          onGesture(player.id, gesture);
+          onGestureRef.current(player.id, gesture);
         }
       }
 
       if (isCalibrating) {
-        const allCalibrated = players.every(p => p.calibration.isCalibrated);
-        if (allCalibrated && players.length > 0) onCalibrationComplete();
+        const allCalibrated = currentPlayers.every(p => p.calibration.isCalibrated);
+        if (allCalibrated && currentPlayers.length > 0) {
+          engine.completeCalibration();
+        }
       }
     });
-  }, [videoElement, players, isCalibrating, isPlaying, onCalibrationComplete, onGesture]);
+  }, [videoRef, engineRef]);
 
   const stopDetection = useCallback(() => { detectorRef.current?.stop(); }, []);
 

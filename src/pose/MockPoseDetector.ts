@@ -225,17 +225,23 @@ export function createJumpingPose(): PoseLandmarks {
 
 /**
  * Helper: Create a ducking pose (compressed height)
+ * Standing height: ankle(0.95) - nose(0.2) = 0.75
+ * Duck trigger is 85% of baseline, so we need height < 0.75 * 0.85 = 0.6375
+ * We'll set nose at 0.4 giving height = 0.95 - 0.4 = 0.55 (73% of standing)
  */
 export function createDuckingPose(): PoseLandmarks {
   const pose = createStandingPose();
 
-  // Compress upper body (15% reduction in height)
-  const compressionFactor = 0.85;
+  // Move nose down significantly (simulating crouching)
+  pose[0].y = 0.4; // Was 0.2, now 0.4 (ducking)
 
-  // Lower head and upper body
-  pose[0].y = 0.2 + (0.7 - 0.2) * (1 - compressionFactor); // Nose
-  pose[11].y = 0.35 + (0.7 - 0.35) * 0.5; // Shoulders move down
-  pose[12].y = 0.35 + (0.7 - 0.35) * 0.5;
+  // Move shoulders down to match crouching posture
+  pose[11].y = 0.55; // Was 0.35, now 0.55
+  pose[12].y = 0.55;
+
+  // Move elbows down
+  pose[13].y = 0.65; // Was 0.5
+  pose[14].y = 0.65;
 
   return pose;
 }

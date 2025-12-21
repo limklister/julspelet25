@@ -18,6 +18,7 @@ describe('GameRenderer', () => {
       textAlign: 'left',
       shadowBlur: 0,
       shadowColor: '',
+      globalAlpha: 1,
       fillRect: vi.fn(),
       strokeRect: vi.fn(),
       fillText: vi.fn(),
@@ -25,6 +26,10 @@ describe('GameRenderer', () => {
       moveTo: vi.fn(),
       lineTo: vi.fn(),
       stroke: vi.fn(),
+      fill: vi.fn(),
+      arc: vi.fn(),
+      ellipse: vi.fn(),
+      closePath: vi.fn(),
       createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
     } as unknown as CanvasRenderingContext2D;
     mockCanvas = { width: 800, height: 400 } as HTMLCanvasElement;
@@ -42,13 +47,15 @@ describe('GameRenderer', () => {
       { x: 600, type: 'high', width: 30, height: 25 },
     ];
     renderer.renderObstacles(mockCtx, obstacles, 340);
-    expect(mockCtx.fillRect).toHaveBeenCalledTimes(2);
+    // Now renders snow piles (ellipse) and gift boxes (fillRect + ribbons)
+    expect(mockCtx.ellipse).toHaveBeenCalled();
+    expect(mockCtx.fillRect).toHaveBeenCalled();
   });
 
   it('should render score', () => {
     renderer.renderScore(mockCtx, 100, 500);
-    expect(mockCtx.fillText).toHaveBeenCalledWith('SCORE: 100', 20, 40);
-    expect(mockCtx.fillText).toHaveBeenCalledWith('HIGH: 500', 20, 70);
+    expect(mockCtx.fillText).toHaveBeenCalledWith('⭐ POÄNG: 100', 20, 40);
+    expect(mockCtx.fillText).toHaveBeenCalledWith('🏆 REKORD: 500', 20, 70);
   });
 
   it('should render calibration', () => {

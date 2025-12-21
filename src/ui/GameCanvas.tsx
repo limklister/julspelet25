@@ -77,8 +77,8 @@ export function GameCanvas({ engine, onGameOver }: GameCanvasProps) {
       ref={canvasRef}
       width={800}
       height={400}
-      className="border-4 border-green-400"
-      style={{ boxShadow: '0 0 30px #00ff88, inset 0 0 30px rgba(0,255,136,0.1)' }}
+      className="border-4 border-sky-300 rounded-lg"
+      style={{ boxShadow: '0 0 30px rgba(135, 206, 235, 0.5), inset 0 0 30px rgba(135, 206, 235, 0.1)' }}
     />
   );
 }

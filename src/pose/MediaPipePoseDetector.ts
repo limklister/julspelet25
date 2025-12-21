@@ -18,7 +18,7 @@ import {
   PoseDetectionResult,
   DEFAULT_POSE_DETECTOR_CONFIG,
 } from './PoseDetector';
-import { PoseLandmarks, NormalizedLandmark } from '@/core/types';
+import { PoseLandmarks } from '@/core/types';
 
 /**
  * MediaPipe pose detector implementation

@@ -7,31 +7,42 @@ interface GameOverProps {
 export function GameOver({ score, isNewRecord, onRestart }: GameOverProps) {
   return (
     <div className="text-center">
-      <h1 className="text-7xl font-bold mb-8" style={{
-        color: '#ff0066',
-        textShadow: '0 0 20px #ff0066, 0 0 40px #ff0066',
-      }}>
-        GAME OVER
-      </h1>
-      <p className="text-5xl text-green-400 mb-4">SCORE: {score}</p>
-      {isNewRecord && (
-        <p className="text-3xl mb-8 animate-pulse" style={{
-          color: '#ff8800',
-          textShadow: '0 0 15px #ff8800',
-        }}>
-          NYTT REKORD!
-        </p>
-      )}
-      <button
-        onClick={onRestart}
-        className="mt-8 px-16 py-5 text-3xl font-bold text-white border-4 border-green-400"
+      <div className="text-5xl mb-4">❄️</div>
+      <h1
+        className="text-7xl font-bold mb-6"
         style={{
-          background: 'linear-gradient(45deg, #ff4500, #ff6b00)',
-          boxShadow: '0 0 20px #ff4500, 0 0 40px #ff4500',
+          color: "#87ceeb",
+          textShadow: "0 0 20px #87ceeb, 0 0 40px #1e90ff",
         }}
       >
-        SPELA IGEN
+        SLUT FÖR IDAG!
+      </h1>
+      <p className="text-5xl text-white mb-4">⭐ POÄNG: {score} ⭐</p>
+      {isNewRecord && (
+        <p
+          className="text-3xl mb-6 animate-pulse"
+          style={{
+            color: "#ffd700",
+            textShadow: "0 0 15px #ffd700",
+          }}
+        >
+          🎉 NYTT REKORD! 🎉
+        </p>
+      )}
+      <div className="text-4xl my-4">🎄🎁🎄</div>
+      <button
+        onClick={onRestart}
+        className="mt-6 px-24 py-10 text-5xl font-bold text-white border-4 border-red-500 rounded-2xl transition-all hover:scale-105 min-w-[500px] min-h-[150px]"
+        style={{
+          background: "linear-gradient(45deg, #84bdf2ff, #3c5ee7ff)",
+          boxShadow: "0 0 30px #412bc0ff, 0 0 60px #3c5ee7ff",
+        }}
+      >
+        🎮 FÖRSÖK IGEN! 🎮
       </button>
+      <p className="mt-4 text-sky-300 text-lg">
+        Klicka för att hoppa tillbaka i snön!
+      </p>
     </div>
   );
 }

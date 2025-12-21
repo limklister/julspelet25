@@ -16,21 +16,18 @@ function App() {
   const camera = useCamera();
 
   const handleGesture = useCallback((playerId: number, gesture: { shouldJump: boolean; isDucking: boolean }) => {
-    if (gesture.shouldJump) engineRef.current.applyJump(playerId);
+    if (gesture.shouldJump) {
+      engineRef.current.applyJump(playerId);
+    }
     const player = engineRef.current.getPlayers().find(p => p.id === playerId);
-    if (player) player.physics.isDucking = gesture.isDucking;
-  }, []);
-
-  const handleCalibrationComplete = useCallback(() => {
-    engineRef.current.completeCalibration();
+    if (player) {
+      player.physics.isDucking = gesture.isDucking;
+    }
   }, []);
 
   const pose = usePoseDetection({
-    videoElement: camera.videoRef.current,
-    players: engineRef.current.getPlayers(),
-    isCalibrating: engineRef.current.getState() === 'calibrating',
-    isPlaying: engineRef.current.getState() === 'playing',
-    onCalibrationComplete: handleCalibrationComplete,
+    videoRef: camera.videoRef,
+    engineRef: engineRef,
     onGesture: handleGesture,
   });
 
@@ -50,7 +47,7 @@ function App() {
   const handleStart = useCallback(() => {
     engineRef.current = new GameEngine();
     engineRef.current.startGame();
-    engineRef.current.addPlayer(); // Add at least one player
+    engineRef.current.addPlayer();
     pose.reset();
     pose.startDetection();
     setGameState('playing');
@@ -64,7 +61,7 @@ function App() {
   }, [pose]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-red-950 flex flex-col items-center justify-center font-mono text-green-400">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-sky-950 to-slate-800 flex flex-col items-center justify-center font-mono">
       <video ref={camera.videoRef} className="hidden" width={640} height={480} autoPlay playsInline />
       {gameState === 'menu' && <Menu isLoading={isLoading} loadingText={loadingText} onStart={handleStart} />}
       {gameState === 'playing' && <GameCanvas engine={engineRef.current} onGameOver={handleGameOver} />}
