@@ -161,14 +161,15 @@ export class BodyModel {
   }
 
   /**
-   * Check if landmarks are valid (all key points present with good visibility)
+   * Check if landmarks are valid (all key points present)
+   * Made very lenient - only checks if landmarks exist and are in valid range
    */
-  static isValid(landmarks: PoseLandmarks, minVisibility = 0.5): boolean {
-    if (!landmarks || landmarks.length !== 33) {
+  static isValid(landmarks: PoseLandmarks, minVisibility = 0.1): boolean {
+    if (!landmarks || landmarks.length < 29) {
       return false;
     }
 
-    // Check key landmarks
+    // Check key landmarks exist
     const keyIndices = [0, 11, 12, 23, 24, 27, 28];
 
     for (const idx of keyIndices) {
@@ -176,13 +177,13 @@ export class BodyModel {
 
       if (!landmark) return false;
 
-      // Check visibility if available
+      // Very lenient visibility check (only if very low)
       if (landmark.visibility !== undefined && landmark.visibility < minVisibility) {
         return false;
       }
 
-      // Check coordinates are in valid range
-      if (landmark.x < 0 || landmark.x > 1 || landmark.y < 0 || landmark.y > 1) {
+      // Allow slightly out of range coordinates (camera edge cases)
+      if (landmark.x < -0.2 || landmark.x > 1.2 || landmark.y < -0.2 || landmark.y > 1.2) {
         return false;
       }
     }

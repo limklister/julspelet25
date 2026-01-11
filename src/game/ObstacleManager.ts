@@ -28,11 +28,15 @@ export class ObstacleManager {
       ? 'high'
       : 'low';
 
+    // High obstacles are bigger (gifts hanging from above)
+    const height = type === 'high' ? 50 : this.config.obstacleHeight;
+    const width = type === 'high' ? 50 : this.config.obstacleWidth;
+
     return {
       x: this.config.canvasWidth,
       type,
-      width: this.config.obstacleWidth,
-      height: this.config.obstacleHeight,
+      width,
+      height,
     };
   }
 
@@ -54,7 +58,8 @@ export class ObstacleManager {
         top: groundLevel - obstacle.height,
       };
     } else {
-      const bottom = groundLevel - 70;
+      const highObstacleOffset = 130; // Higher up so player can duck under
+      const bottom = groundLevel - highObstacleOffset;
       return {
         bottom,
         top: bottom - obstacle.height,

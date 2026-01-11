@@ -120,24 +120,77 @@ export interface Player {
 /**
  * Game state enum
  */
-export type GameStateType = 'menu' | 'calibrating' | 'countdown' | 'playing' | 'gameOver';
+export type GameStateType = 'menu' | 'calibrating' | 'countdown' | 'playing' | 'levelComplete' | 'win' | 'gameOver';
 
 /**
- * Obstacle type
+ * Game object type
  */
-export type ObstacleType = 'low' | 'high';
+export type GameObjectType = 'package' | 'flyingSnowball' | 'rollingSnowball';
 
 /**
- * Obstacle in the game
+ * Game object (package or snowball)
  */
-export interface Obstacle {
+export interface GameObject {
+  // Unique ID for tracking
+  id: number;
+
   // Horizontal position
   x: number;
 
-  // Obstacle type (low = jump over, high = duck under)
-  type: ObstacleType;
+  // Vertical position
+  y: number;
 
-  // Obstacle dimensions
+  // Object type
+  type: GameObjectType;
+
+  // Object dimensions
+  width: number;
+  height: number;
+
+  // Whether this object has been collected/hit (for removal)
+  consumed: boolean;
+
+  // Visual variant (for packages: 0=red, 1=green)
+  variant: number;
+}
+
+/**
+ * Level state
+ */
+export interface LevelState {
+  // Current level (1-5)
+  level: number;
+
+  // Packages collected this level
+  packagesCollected: number;
+
+  // Packages required to complete level
+  packagesRequired: number;
+
+  // Speed multiplier for this level
+  speedMultiplier: number;
+
+  // Total packages collected (across all levels, for display)
+  totalPackages: number;
+}
+
+/**
+ * Collision result types
+ */
+export type CollisionResultType = 'catch' | 'hit' | 'miss' | 'dodge';
+
+export interface CollisionResult {
+  type: CollisionResultType;
+  object: GameObject;
+  packagesLost?: number;
+}
+
+// Keep old Obstacle type for backwards compatibility during transition
+export type ObstacleType = 'low' | 'high';
+
+export interface Obstacle {
+  x: number;
+  type: ObstacleType;
   width: number;
   height: number;
 }

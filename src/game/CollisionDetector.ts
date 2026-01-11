@@ -1,4 +1,4 @@
-import { Obstacle } from '@/core/types';
+import { GameObject, CollisionResult, PhysicsState } from '@/core/types';
 
 export interface BoundingBox {
   left: number;
@@ -9,12 +9,10 @@ export interface BoundingBox {
 
 export interface CollisionConfig {
   groundLevel: number;
-  highObstacleOffset: number;
 }
 
 const DEFAULT_CONFIG: CollisionConfig = {
   groundLevel: 340,
-  highObstacleOffset: 70,
 };
 
 export class CollisionDetector {
@@ -22,6 +20,10 @@ export class CollisionDetector {
 
   constructor(config: Partial<CollisionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  updateConfig(config: Partial<CollisionConfig>): void {
+    this.config = { ...this.config, ...config };
   }
 
   boxesOverlap(a: BoundingBox, b: BoundingBox): boolean {
@@ -33,39 +35,81 @@ export class CollisionDetector {
     );
   }
 
-  getObstacleBox(obstacle: Obstacle): BoundingBox {
-    const left = obstacle.x;
-    const right = obstacle.x + obstacle.width;
+  getObjectBox(obj: GameObject): BoundingBox {
+    return {
+      left: obj.x - obj.width / 2,
+      right: obj.x + obj.width / 2,
+      top: obj.y - obj.height / 2,
+      bottom: obj.y + obj.height / 2,
+    };
+  }
 
-    if (obstacle.type === 'low') {
-      return {
-        left,
-        right,
-        top: this.config.groundLevel - obstacle.height,
-        bottom: this.config.groundLevel,
-      };
-    } else {
-      const bottom = this.config.groundLevel - this.config.highObstacleOffset;
-      return {
-        left,
-        right,
-        top: bottom - obstacle.height,
-        bottom,
-      };
+  /**
+   * Check collision between player and game object
+   * Returns collision result based on player state and object type
+   */
+  checkObject(
+    playerBox: BoundingBox,
+    physics: PhysicsState,
+    obj: GameObject,
+    currentLevel: number
+  ): CollisionResult | null {
+    const objectBox = this.getObjectBox(obj);
+
+    // Check if boxes overlap
+    if (!this.boxesOverlap(playerBox, objectBox)) {
+      return null;
+    }
+
+    const isDucking = physics.isDucking;
+    const isJumping = physics.y > 20; // Threshold for being "in the air"
+
+    switch (obj.type) {
+      case 'package':
+        // Packages: catch if standing/jumping, miss if ducking
+        if (isDucking) {
+          // Don't count as collision - package passes over
+          return null;
+        }
+        return { type: 'catch', object: obj };
+
+      case 'flyingSnowball':
+        // Flying snowballs: dodge if ducking, hit if standing/jumping
+        if (isDucking) {
+          return { type: 'dodge', object: obj };
+        }
+        return { type: 'hit', object: obj, packagesLost: currentLevel };
+
+      case 'rollingSnowball':
+        // Rolling snowballs: dodge if jumping, hit if on ground
+        if (isJumping) {
+          return { type: 'dodge', object: obj };
+        }
+        return { type: 'hit', object: obj, packagesLost: currentLevel };
     }
   }
 
-  checkObstacle(playerBox: BoundingBox, obstacle: Obstacle): boolean {
-    const obstacleBox = this.getObstacleBox(obstacle);
-    return this.boxesOverlap(playerBox, obstacleBox);
-  }
+  /**
+   * Check all objects for collisions with player
+   * Returns array of collision results
+   */
+  checkAllObjects(
+    playerBox: BoundingBox,
+    physics: PhysicsState,
+    objects: GameObject[],
+    currentLevel: number
+  ): CollisionResult[] {
+    const results: CollisionResult[] = [];
 
-  checkAllObstacles(playerBox: BoundingBox, obstacles: Obstacle[]): Obstacle | null {
-    for (const obstacle of obstacles) {
-      if (this.checkObstacle(playerBox, obstacle)) {
-        return obstacle;
+    for (const obj of objects) {
+      if (obj.consumed) continue;
+
+      const result = this.checkObject(playerBox, physics, obj, currentLevel);
+      if (result) {
+        results.push(result);
       }
     }
-    return null;
+
+    return results;
   }
 }

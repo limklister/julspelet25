@@ -201,15 +201,15 @@ export class GestureDetector {
   /**
    * CRITICAL FIX #6: Duck Detection with Hysteresis
    *
-   * Original problem:
-   * - Instant toggle (no hysteresis) → flickering
-   * - Single threshold → oscillation on boundary
-   * - No debounce → pose noise triggers duck
+   * Uses TORSO compression (shoulders to hips) instead of full body height.
+   * This works better across different body proportions (adults vs children)
+   * because the torso compression ratio is more consistent when ducking.
    *
    * New approach:
-   * - Two thresholds (0.85 trigger, 0.90 release) → 5% hysteresis gap
-   * - State machine → stable transitions
-   * - Debounce timer → ignore momentary noise
+   * - Measure torso length (shoulders to hips) ratio
+   * - Two thresholds with hysteresis gap
+   * - State machine for stable transitions
+   * - Debounce timer to ignore momentary noise
    * - Only duck when on ground
    */
   private detectDuck(
@@ -223,9 +223,21 @@ export class GestureDetector {
       return false;
     }
 
+    // Use torso length for more consistent detection across body sizes
+    const currentTorso = BodyModel.getTorsoLength(landmarks);
+    const baselineTorso = calibration.baselineTorsoLength;
+
+    // Also check full height as a secondary signal
     const currentHeight = BodyModel.getFullHeight(landmarks);
     const baselineHeight = calibration.baselineHeight;
+
+    // Calculate both ratios
+    const torsoRatio = currentTorso / baselineTorso;
     const heightRatio = currentHeight / baselineHeight;
+
+    // Use the more compressed ratio (lower value = more ducking)
+    // This catches both "bending at waist" and "crouching down" styles
+    const duckRatio = Math.min(torsoRatio, heightRatio);
 
     const now = performance.now();
 
@@ -233,7 +245,7 @@ export class GestureDetector {
     if (!this.state.isDucking) {
       // NOT DUCKING → check if should start ducking
 
-      if (heightRatio < this.config.duckTriggerRatio) {
+      if (duckRatio < this.config.duckTriggerRatio) {
         // Below trigger threshold - start timer
         if (!this.state.duckStateStartMs) {
           this.state.duckStateStartMs = now;
@@ -251,7 +263,7 @@ export class GestureDetector {
     } else {
       // DUCKING → check if should stop ducking
 
-      if (heightRatio > this.config.duckReleaseRatio) {
+      if (duckRatio > this.config.duckReleaseRatio) {
         // Above release threshold (with hysteresis) - stop ducking
         this.state.isDucking = false;
         this.state.duckStateStartMs = null;

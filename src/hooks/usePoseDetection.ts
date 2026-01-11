@@ -47,7 +47,10 @@ export function usePoseDetection({
       const isCalibrating = currentState === 'calibrating';
       const isPlaying = currentState === 'playing';
 
-      if (currentPlayers.length === 0) return;
+      if (currentPlayers.length === 0) {
+        console.warn('No players in game - pose detected but no player to assign it to');
+        return;
+      }
 
       const sortedPoses = [...result.poses].sort((a, b) => {
         const hipXA = (a[23].x + a[24].x) / 2;
@@ -70,18 +73,26 @@ export function usePoseDetection({
         if (isCalibrating) {
           if (!calibrationRef.current.has(player.id)) {
             calibrationRef.current.set(player.id, new CalibrationService({
-              maxVariance: 0.01,
+              maxVariance: 1.0, // Very forgiving - almost always succeeds
+              calibrationFrames: 30, // 1 second at 30fps
             }));
           }
           const calibration = calibrationRef.current.get(player.id)!;
           const complete = calibration.addFrame(landmarks);
-          setCalibrationProgress(calibration.getProgress());
+          const progress = calibration.getProgress();
+          setCalibrationProgress(progress);
+          console.log(`Calibration progress: ${(progress * 100).toFixed(0)}%, samples: ${calibration.getSampleCount()}`);
+
           if (complete) {
             const res = calibration.finalize();
+            console.log('Calibration finalize result:', res);
             if (res.success && res.data) {
               player.calibration = res.data;
+              console.log(`Player ${player.id} calibrated successfully!`);
             } else {
+              console.warn(`Player ${player.id} calibration failed:`, res.error, '- retrying...');
               calibration.reset();
+              setCalibrationProgress(0);
             }
           }
         } else if (isPlaying && player.calibration.isCalibrated) {
@@ -96,7 +107,9 @@ export function usePoseDetection({
 
       if (isCalibrating) {
         const allCalibrated = currentPlayers.every(p => p.calibration.isCalibrated);
+
         if (allCalibrated && currentPlayers.length > 0) {
+          console.log('All players calibrated! Starting countdown...');
           engine.completeCalibration();
         }
       }

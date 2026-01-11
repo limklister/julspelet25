@@ -3,21 +3,28 @@ import { GameEngine } from '@/game/GameEngine';
 import { GameCanvas } from '@/ui/GameCanvas';
 import { Menu } from '@/ui/Menu';
 import { GameOver } from '@/ui/GameOver';
+import { WinScreen } from '@/ui/WinScreen';
 import { useCamera } from '@/hooks/useCamera';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
+import { soundManager } from '@/audio/SoundManager';
 
 function App() {
-  const [gameState, setGameState] = useState<'menu' | 'playing' | 'gameOver'>('menu');
+  const [gameState, setGameState] = useState<'menu' | 'playing' | 'win' | 'gameOver'>('menu');
   const [isLoading, setIsLoading] = useState(true);
   const [loadingText, setLoadingText] = useState('Laddar AI-modell...');
   const [finalScore, setFinalScore] = useState(0);
   const [isNewRecord, setIsNewRecord] = useState(false);
-  const engineRef = useRef<GameEngine>(new GameEngine());
+  const engineRef = useRef<GameEngine>(new GameEngine({
+    canvasWidth: window.innerWidth,
+    canvasHeight: window.innerHeight,
+    groundLevel: window.innerHeight - 60,
+  }));
   const camera = useCamera();
 
   const handleGesture = useCallback((playerId: number, gesture: { shouldJump: boolean; isDucking: boolean }) => {
     if (gesture.shouldJump) {
       engineRef.current.applyJump(playerId);
+      soundManager.play('jump');
     }
     const player = engineRef.current.getPlayers().find(p => p.id === playerId);
     if (player) {
@@ -45,7 +52,11 @@ function App() {
   }, []);
 
   const handleStart = useCallback(() => {
-    engineRef.current = new GameEngine();
+    engineRef.current = new GameEngine({
+      canvasWidth: window.innerWidth,
+      canvasHeight: window.innerHeight,
+      groundLevel: window.innerHeight - 60,
+    });
     engineRef.current.startGame();
     engineRef.current.addPlayer();
     pose.reset();
@@ -55,16 +66,30 @@ function App() {
 
   const handleGameOver = useCallback(() => {
     pose.stopDetection();
-    setFinalScore(engineRef.current.getScore());
-    setIsNewRecord(engineRef.current.getScore() >= engineRef.current.getHighScore() && engineRef.current.getScore() > 0);
+    const levelState = engineRef.current.getLevelState();
+    setFinalScore(levelState.totalPackages);
+    setIsNewRecord(engineRef.current.getHighestLevel() >= 5);
     setGameState('gameOver');
   }, [pose]);
 
+  const handleWin = useCallback(() => {
+    pose.stopDetection();
+    setGameState('win');
+  }, [pose]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-sky-950 to-slate-800 flex flex-col items-center justify-center font-mono">
+    <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }} className="bg-gradient-to-b from-slate-900 via-sky-950 to-slate-800 flex flex-col items-center justify-center font-mono">
       <video ref={camera.videoRef} className="hidden" width={640} height={480} autoPlay playsInline />
       {gameState === 'menu' && <Menu isLoading={isLoading} loadingText={loadingText} onStart={handleStart} />}
-      {gameState === 'playing' && <GameCanvas engine={engineRef.current} onGameOver={handleGameOver} />}
+      {gameState === 'playing' && (
+        <GameCanvas
+          engine={engineRef.current}
+          onGameOver={handleGameOver}
+          onWin={handleWin}
+          calibrationProgress={pose.calibrationProgress}
+        />
+      )}
+      {gameState === 'win' && <WinScreen onPlayAgain={handleStart} />}
       {gameState === 'gameOver' && <GameOver score={finalScore} isNewRecord={isNewRecord} onRestart={handleStart} />}
     </div>
   );
