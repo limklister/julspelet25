@@ -45,36 +45,49 @@ export class MediaPipePoseDetector implements PoseDetector {
 
   /**
    * Initialize MediaPipe pose landmarker
+   * Tries GPU first, falls back to CPU if GPU is not available
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
 
-    try {
-      // Load MediaPipe vision tasks
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
-      );
+    // Load MediaPipe vision tasks
+    const vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
+    );
 
-      // Create pose landmarker
-      this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numPoses: this.config.numPoses,
-        minPoseDetectionConfidence: this.config.minDetectionConfidence,
-        minPosePresenceConfidence: this.config.minTrackingConfidence,
-        minTrackingConfidence: this.config.minTrackingConfidence,
-      });
+    // Try GPU first, fall back to CPU
+    const delegates: Array<'GPU' | 'CPU'> = ['GPU', 'CPU'];
 
-      this.initialized = true;
-    } catch (error) {
-      console.error('Failed to initialize MediaPipe pose detector:', error);
-      throw new Error('MediaPipe initialization failed');
+    for (const delegate of delegates) {
+      try {
+        console.log(`Trying MediaPipe with ${delegate} delegate...`);
+
+        this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            delegate,
+          },
+          runningMode: 'VIDEO',
+          numPoses: this.config.numPoses,
+          minPoseDetectionConfidence: this.config.minDetectionConfidence,
+          minPosePresenceConfidence: this.config.minTrackingConfidence,
+          minTrackingConfidence: this.config.minTrackingConfidence,
+        });
+
+        console.log(`MediaPipe initialized successfully with ${delegate}`);
+        this.initialized = true;
+        return;
+      } catch (error) {
+        console.warn(`Failed to initialize MediaPipe with ${delegate}:`, error);
+        if (delegate === 'CPU') {
+          // Both failed
+          throw new Error('MediaPipe initialization failed on both GPU and CPU');
+        }
+        // Try next delegate
+      }
     }
   }
 
