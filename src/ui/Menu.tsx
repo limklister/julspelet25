@@ -3,10 +3,11 @@ import { useRef, useEffect, useState } from 'react';
 interface MenuProps {
   isLoading: boolean;
   loadingText: string;
+  errorText?: string | null;
   onStart: () => void;
 }
 
-export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
+export function Menu({ isLoading, loadingText, errorText, onStart }: MenuProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const animationRef = useRef<number | null>(null);
@@ -204,14 +205,42 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
       ctx.fillStyle = '#e8d4a8';
       ctx.fillText('och julen varar ända till påska...', cardX, cardY + 55);
 
-      // Loading or button area
-      if (isLoading) {
+      // Loading, error, or button area
+      if (errorText) {
+        // Show error message
+        ctx.font = 'bold 20px Georgia, serif';
+        ctx.fillStyle = '#e74c3c';
+
+        // Word wrap the error text
+        const maxWidth = cardW - 60;
+        const words = errorText.split(' ');
+        let line = '';
+        let y = cardY + 110;
+
+        for (const word of words) {
+          const testLine = line + word + ' ';
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > maxWidth && line !== '') {
+            ctx.fillText(line.trim(), cardX, y);
+            line = word + ' ';
+            y += 28;
+          } else {
+            line = testLine;
+          }
+        }
+        ctx.fillText(line.trim(), cardX, y);
+
+        // Suggestion text
+        ctx.font = '18px Georgia, serif';
+        ctx.fillStyle = '#f5e6c8';
+        ctx.fillText('Prova Chrome eller uppdatera webbläsaren', cardX, y + 40);
+      } else if (isLoading) {
         ctx.font = 'bold 24px Georgia, serif';
         ctx.fillStyle = '#d4af37';
         const dots = '.'.repeat((Math.floor(frame / 20) % 4));
         ctx.fillText(loadingText + dots, cardX, cardY + 120);
       }
-      // Button is rendered as HTML overlay when not loading
+      // Button is rendered as HTML overlay when not loading and no error
 
       ctx.textAlign = 'left';
 
@@ -225,7 +254,7 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isLoading, loadingText]);
+  }, [isLoading, loadingText, errorText]);
 
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
@@ -239,7 +268,7 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
           height: '100%',
         }}
       />
-      {!isLoading && (
+      {!isLoading && !errorText && (
         <button
           onClick={onStart}
           onMouseEnter={() => setButtonHover(true)}

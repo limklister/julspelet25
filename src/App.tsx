@@ -12,6 +12,7 @@ function App() {
   const [gameState, setGameState] = useState<'menu' | 'playing' | 'win' | 'gameOver'>('menu');
   const [isLoading, setIsLoading] = useState(true);
   const [loadingText, setLoadingText] = useState('Laddar AI-modell...');
+  const [errorText, setErrorText] = useState<string | null>(null);
   const [finalScore, setFinalScore] = useState(0);
   const [isNewRecord, setIsNewRecord] = useState(false);
   const engineRef = useRef<GameEngine>(new GameEngine({
@@ -40,12 +41,19 @@ function App() {
 
   useEffect(() => {
     const init = async () => {
-      setLoadingText('Laddar AI-modell...');
-      await pose.initialize();
-      setLoadingText('Startar kamera...');
-      await camera.initialize();
-      setLoadingText('Redo!');
-      setIsLoading(false);
+      try {
+        setLoadingText('Laddar AI-modell...');
+        await pose.initialize();
+        setLoadingText('Startar kamera...');
+        await camera.initialize();
+        setLoadingText('Redo!');
+        setIsLoading(false);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Okänt fel';
+        console.error('Initialization failed:', error);
+        setErrorText(message);
+        setLoadingText('Fel vid laddning');
+      }
     };
     init();
     return () => camera.stop();
@@ -80,7 +88,7 @@ function App() {
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }} className="bg-gradient-to-b from-slate-900 via-sky-950 to-slate-800 flex flex-col items-center justify-center font-mono">
       <video ref={camera.videoRef} className="hidden" width={640} height={480} autoPlay playsInline />
-      {gameState === 'menu' && <Menu isLoading={isLoading} loadingText={loadingText} onStart={handleStart} />}
+      {gameState === 'menu' && <Menu isLoading={isLoading} loadingText={loadingText} errorText={errorText} onStart={handleStart} />}
       {gameState === 'playing' && (
         <GameCanvas
           engine={engineRef.current}

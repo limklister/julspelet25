@@ -52,13 +52,22 @@ export class MediaPipePoseDetector implements PoseDetector {
       return;
     }
 
-    // Load MediaPipe vision tasks
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
-    );
+    // Load MediaPipe vision tasks - use latest version matching package.json
+    console.log('Loading MediaPipe WASM files...');
+    let vision;
+    try {
+      vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
+      );
+      console.log('MediaPipe WASM loaded successfully');
+    } catch (wasmError) {
+      console.error('Failed to load MediaPipe WASM:', wasmError);
+      throw new Error(`Kunde inte ladda MediaPipe WASM: ${wasmError}`);
+    }
 
     // Try GPU first, fall back to CPU
     const delegates: Array<'GPU' | 'CPU'> = ['GPU', 'CPU'];
+    const errors: string[] = [];
 
     for (const delegate of delegates) {
       try {
@@ -81,14 +90,15 @@ export class MediaPipePoseDetector implements PoseDetector {
         this.initialized = true;
         return;
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        errors.push(`${delegate}: ${errorMsg}`);
         console.warn(`Failed to initialize MediaPipe with ${delegate}:`, error);
-        if (delegate === 'CPU') {
-          // Both failed
-          throw new Error('MediaPipe initialization failed on both GPU and CPU');
-        }
-        // Try next delegate
       }
     }
+
+    // Both failed - throw with details
+    const errorDetails = errors.join('; ');
+    throw new Error(`MediaPipe kunde inte startas. Fel: ${errorDetails}. Prova en annan webbläsare (Chrome rekommenderas).`);
   }
 
   /**
