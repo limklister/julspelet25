@@ -52,12 +52,12 @@ export class MediaPipePoseDetector implements PoseDetector {
       return;
     }
 
-    // Load MediaPipe vision tasks - use latest version matching package.json
+    // Load MediaPipe vision tasks
     console.log('Loading MediaPipe WASM files...');
     let vision;
     try {
       vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
       );
       console.log('MediaPipe WASM loaded successfully');
     } catch (wasmError) {
