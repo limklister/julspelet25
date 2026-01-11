@@ -5,6 +5,8 @@ import path from 'path';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // For GitHub Pages: use repo name as base path in production
+  base: process.env.GITHUB_PAGES ? '/julspelet25/' : '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

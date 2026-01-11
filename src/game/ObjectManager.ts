@@ -12,9 +12,9 @@ export interface ObjectManagerConfig {
 const DEFAULT_CONFIG: ObjectManagerConfig = {
   canvasWidth: 800,
   groundLevel: 340,
-  baseSpawnInterval: 80,
-  packageProbability: 0.6,
-  flyingSnowballProbability: 0.2,
+  baseSpawnInterval: 65,
+  packageProbability: 0.55,
+  flyingSnowballProbability: 0.25,
 };
 
 export class ObjectManager {

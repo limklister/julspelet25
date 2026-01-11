@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 
 interface MenuProps {
   isLoading: boolean;
@@ -10,16 +10,7 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const animationRef = useRef<number | null>(null);
-
-  // Auto-start when loading is complete
-  useEffect(() => {
-    if (!isLoading) {
-      const timer = setTimeout(() => {
-        onStart();
-      }, 1500); // Wait 1.5 seconds after loading to let user see the screen
-      return () => clearTimeout(timer);
-    }
-  }, [isLoading, onStart]);
+  const [buttonHover, setButtonHover] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,11 +24,11 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
 
     // Snowflakes
     const snowflakes: { x: number; y: number; size: number; speed: number; wobble: number }[] = [];
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 100; i++) {
       snowflakes.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        size: Math.random() * 3 + 1,
+        size: Math.random() * 4 + 1,
         speed: Math.random() * 1.5 + 0.5,
         wobble: Math.random() * Math.PI * 2,
       });
@@ -47,24 +38,47 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
       frameRef.current++;
       const frame = frameRef.current;
 
-      // Background gradient
+      // Background gradient - deeper winter night
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      grad.addColorStop(0, '#0a1628');
-      grad.addColorStop(0.4, '#1a3a5c');
-      grad.addColorStop(0.8, '#2d5a87');
-      grad.addColorStop(1, '#1a4a6e');
+      grad.addColorStop(0, '#0a0f1a');
+      grad.addColorStop(0.3, '#0d1a2d');
+      grad.addColorStop(0.6, '#1a3a5c');
+      grad.addColorStop(1, '#2d5a87');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Stars
-      ctx.fillStyle = '#ffffff';
-      for (let i = 0; i < 40; i++) {
-        const x = (i * 41 + frame * 0.03) % canvas.width;
-        const y = (i * 31) % (canvas.height * 0.5);
-        const twinkle = Math.sin(frame * 0.04 + i * 1.5) * 0.5 + 0.5;
-        ctx.globalAlpha = 0.2 + twinkle * 0.6;
+      // Aurora borealis effect
+      ctx.globalAlpha = 0.15;
+      for (let i = 0; i < 3; i++) {
+        const auroraGrad = ctx.createLinearGradient(0, 0, canvas.width, 0);
+        auroraGrad.addColorStop(0, 'transparent');
+        auroraGrad.addColorStop(0.3, '#27ae60');
+        auroraGrad.addColorStop(0.5, '#2ecc71');
+        auroraGrad.addColorStop(0.7, '#27ae60');
+        auroraGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = auroraGrad;
+        const waveY = 80 + i * 40 + Math.sin(frame * 0.01 + i) * 20;
         ctx.beginPath();
-        ctx.arc(x, y, 1 + twinkle, 0, Math.PI * 2);
+        ctx.moveTo(0, waveY);
+        for (let x = 0; x < canvas.width; x += 20) {
+          const y = waveY + Math.sin(x * 0.01 + frame * 0.02 + i) * 30;
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(canvas.width, 0);
+        ctx.lineTo(0, 0);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Stars - more and brighter
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 60; i++) {
+        const x = (i * 41 + frame * 0.02) % canvas.width;
+        const y = (i * 31) % (canvas.height * 0.5);
+        const twinkle = Math.sin(frame * 0.05 + i * 1.5) * 0.5 + 0.5;
+        ctx.globalAlpha = 0.3 + twinkle * 0.7;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5 + twinkle * 1.5, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
@@ -78,115 +92,126 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
           flake.y = -10;
           flake.x = Math.random() * canvas.width;
         }
-        ctx.globalAlpha = 0.5 + flake.size * 0.15;
+        ctx.globalAlpha = 0.6 + flake.size * 0.1;
         ctx.beginPath();
         ctx.arc(flake.x, flake.y, flake.size, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
 
-      // Snow ground
-      const groundY = canvas.height - 80;
-      const snowGrad = ctx.createLinearGradient(0, groundY, 0, canvas.height);
-      snowGrad.addColorStop(0, '#e8f4f8');
-      snowGrad.addColorStop(0.3, '#d4e9ed');
-      snowGrad.addColorStop(1, '#b8d4dc');
-      ctx.fillStyle = snowGrad;
-      ctx.fillRect(0, groundY, canvas.width, 80);
+      // Snow ground with gentle hills
+      const groundY = canvas.height - 100;
+      ctx.fillStyle = '#e8f4f8';
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height);
+      for (let x = 0; x <= canvas.width; x += 10) {
+        const hillY = groundY + Math.sin(x * 0.008) * 20 + Math.sin(x * 0.02) * 10;
+        ctx.lineTo(x, hillY);
+      }
+      ctx.lineTo(canvas.width, canvas.height);
+      ctx.fill();
 
-      // Snow bumps
+      // Snow sparkles
       ctx.fillStyle = '#ffffff';
-      for (let i = 0; i < canvas.width; i += 40) {
-        const height = Math.sin(i * 0.08 + frame * 0.01) * 8 + 12;
+      for (let i = 0; i < 30; i++) {
+        const sparkleX = (i * 67 + frame * 0.5) % canvas.width;
+        const sparkleY = groundY + 20 + (i * 13) % 60;
+        const sparkle = Math.sin(frame * 0.1 + i * 2) * 0.5 + 0.5;
+        ctx.globalAlpha = sparkle * 0.8;
         ctx.beginPath();
-        ctx.ellipse(i + 20, groundY, 25, height, 0, Math.PI, 0);
+        ctx.arc(sparkleX, sparkleY, 1 + sparkle, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.globalAlpha = 1;
 
-      // Christmas trees on sides
-      drawTree(ctx, canvas.width * 0.08, groundY, 0.8);
-      drawTree(ctx, canvas.width * 0.18, groundY, 0.5);
-      drawTree(ctx, canvas.width * 0.82, groundY, 0.6);
-      drawTree(ctx, canvas.width * 0.92, groundY, 0.9);
+      // Christmas trees
+      drawTree(ctx, canvas.width * 0.06, groundY + 10, 0.9);
+      drawTree(ctx, canvas.width * 0.14, groundY + 15, 0.6);
+      drawTree(ctx, canvas.width * 0.22, groundY + 5, 0.4);
+      drawTree(ctx, canvas.width * 0.78, groundY + 5, 0.5);
+      drawTree(ctx, canvas.width * 0.86, groundY + 15, 0.7);
+      drawTree(ctx, canvas.width * 0.94, groundY + 10, 0.85);
 
-      // Card background
+      // Main card
       const cardX = canvas.width / 2;
-      const cardY = canvas.height / 2 - 30;
-      const cardW = 600;
-      const cardH = 420;
+      const cardY = canvas.height / 2 - 20;
+      const cardW = 580;
+      const cardH = 380;
 
-      // Card shadow
+      // Card glow
+      ctx.shadowBlur = 40;
+      ctx.shadowColor = 'rgba(192, 57, 43, 0.4)';
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.beginPath();
-      ctx.roundRect(cardX - cardW / 2 + 8, cardY - cardH / 2 + 8, cardW, cardH, 20);
+      ctx.roundRect(cardX - cardW / 2, cardY - cardH / 2, cardW, cardH, 24);
       ctx.fill();
+      ctx.shadowBlur = 0;
 
-      // Card body
+      // Card body - rich deep red gradient
       const cardGrad = ctx.createLinearGradient(cardX - cardW / 2, cardY - cardH / 2, cardX + cardW / 2, cardY + cardH / 2);
-      cardGrad.addColorStop(0, '#1a2a4a');
-      cardGrad.addColorStop(1, '#0d1a2d');
+      cardGrad.addColorStop(0, '#8b1a1a');
+      cardGrad.addColorStop(0.5, '#6b1515');
+      cardGrad.addColorStop(1, '#4a0f0f');
       ctx.fillStyle = cardGrad;
       ctx.beginPath();
-      ctx.roundRect(cardX - cardW / 2, cardY - cardH / 2, cardW, cardH, 20);
+      ctx.roundRect(cardX - cardW / 2, cardY - cardH / 2, cardW, cardH, 24);
       ctx.fill();
 
-      // Card border
-      ctx.strokeStyle = '#c0392b';
-      ctx.lineWidth = 4;
+      // Card border - gold
+      ctx.strokeStyle = '#d4af37';
+      ctx.lineWidth = 3;
       ctx.stroke();
 
       // Inner decorative border
-      ctx.strokeStyle = '#f1c40f';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(cardX - cardW / 2 + 15, cardY - cardH / 2 + 15, cardW - 30, cardH - 30, 12);
+      ctx.roundRect(cardX - cardW / 2 + 12, cardY - cardH / 2 + 12, cardW - 24, cardH - 24, 18);
       ctx.stroke();
 
-      // Corner decorations (holly)
-      drawHolly(ctx, cardX - cardW / 2 + 40, cardY - cardH / 2 + 40, 0.7);
-      drawHolly(ctx, cardX + cardW / 2 - 40, cardY - cardH / 2 + 40, 0.7);
-      drawHolly(ctx, cardX - cardW / 2 + 40, cardY + cardH / 2 - 40, 0.7);
-      drawHolly(ctx, cardX + cardW / 2 - 40, cardY + cardH / 2 - 40, 0.7);
-
-      // Title
-      ctx.textAlign = 'center';
-      ctx.font = 'bold 64px Georgia, serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#c0392b';
-      ctx.fillText('Julspelet', cardX, cardY - 100);
-      ctx.shadowBlur = 0;
+      // Corner holly decorations
+      drawHolly(ctx, cardX - cardW / 2 + 35, cardY - cardH / 2 + 35, 0.8);
+      drawHolly(ctx, cardX + cardW / 2 - 35, cardY - cardH / 2 + 35, 0.8);
+      drawHolly(ctx, cardX - cardW / 2 + 35, cardY + cardH / 2 - 35, 0.8);
+      drawHolly(ctx, cardX + cardW / 2 - 35, cardY + cardH / 2 - 35, 0.8);
 
       // Decorative stars around title
-      for (let i = 0; i < 5; i++) {
-        const starX = cardX - 200 + i * 100;
-        const starY = cardY - 140 + Math.sin(frame * 0.05 + i) * 5;
-        const starSize = 8 + Math.sin(frame * 0.08 + i * 2) * 2;
-        drawStar(ctx, starX, starY, starSize, 5, 0.5, '#f1c40f');
+      for (let i = 0; i < 7; i++) {
+        const starX = cardX - 180 + i * 60;
+        const starY = cardY - 130 + Math.sin(frame * 0.04 + i) * 4;
+        const starSize = 6 + Math.sin(frame * 0.06 + i * 2) * 2;
+        ctx.globalAlpha = 0.7 + Math.sin(frame * 0.05 + i) * 0.3;
+        drawStar(ctx, starX, starY, starSize, 5, 0.5, '#d4af37');
       }
+      ctx.globalAlpha = 1;
 
-      // Subtitle
-      ctx.font = '28px Georgia, serif';
-      ctx.fillStyle = '#87ceeb';
-      ctx.fillText('Fånga paketen, undvik snöbollarna!', cardX, cardY - 40);
-
-      // Instructions
-      ctx.font = '22px Georgia, serif';
+      // Title with elegant styling
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.font = 'bold 72px Georgia, serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText('Stå upp och fånga julklappar', cardX, cardY + 20);
-      ctx.fillText('Ducka för flygande snöbollar', cardX, cardY + 55);
-      ctx.fillText('Hoppa över rullande snöbollar', cardX, cardY + 90);
+      ctx.fillText('Julspelet', cardX, cardY - 80);
+      ctx.shadowBlur = 0;
 
-      // Loading / ready text
-      ctx.font = 'bold 26px Georgia, serif';
+      // Christmas message
+      ctx.font = 'italic 28px Georgia, serif';
+      ctx.fillStyle = '#f5e6c8';
+      ctx.fillText('Nu är det jul igen', cardX, cardY - 20);
+      ctx.fillText('och nu är det jul igen', cardX, cardY + 15);
+
+      ctx.font = '24px Georgia, serif';
+      ctx.fillStyle = '#e8d4a8';
+      ctx.fillText('och julen varar ända till påska...', cardX, cardY + 55);
+
+      // Loading or button area
       if (isLoading) {
-        ctx.fillStyle = '#f1c40f';
+        ctx.font = 'bold 24px Georgia, serif';
+        ctx.fillStyle = '#d4af37';
         const dots = '.'.repeat((Math.floor(frame / 20) % 4));
-        ctx.fillText(loadingText + dots, cardX, cardY + 150);
-      } else {
-        ctx.fillStyle = '#27ae60';
-        ctx.fillText('Ställ dig framför kameran...', cardX, cardY + 150);
+        ctx.fillText(loadingText + dots, cardX, cardY + 120);
       }
+      // Button is rendered as HTML overlay when not loading
 
       ctx.textAlign = 'left';
 
@@ -203,16 +228,49 @@ export function Menu({ isLoading, loadingText, onStart }: MenuProps) {
   }, [isLoading, loadingText]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-      }}
-    />
+    <div style={{ position: 'fixed', inset: 0 }}>
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+        }}
+      />
+      {!isLoading && (
+        <button
+          onClick={onStart}
+          onMouseEnter={() => setButtonHover(true)}
+          onMouseLeave={() => setButtonHover(false)}
+          style={{
+            position: 'fixed',
+            left: '50%',
+            top: '55%',
+            transform: 'translateX(-50%)',
+            padding: '16px 48px',
+            fontSize: '28px',
+            fontFamily: 'Georgia, serif',
+            fontWeight: 'bold',
+            color: '#ffffff',
+            background: buttonHover
+              ? 'linear-gradient(180deg, #2ecc71 0%, #27ae60 100%)'
+              : 'linear-gradient(180deg, #27ae60 0%, #1e8449 100%)',
+            border: '3px solid #d4af37',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            boxShadow: buttonHover
+              ? '0 8px 25px rgba(39, 174, 96, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
+              : '0 6px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.2)',
+            transition: 'all 0.2s ease',
+            letterSpacing: '1px',
+          }}
+        >
+          Starta spelet
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -242,37 +300,48 @@ function drawStar(
 
 function drawTree(ctx: CanvasRenderingContext2D, x: number, groundY: number, scale: number): void {
   // Trunk
-  ctx.fillStyle = '#4a3728';
-  ctx.fillRect(x - 6 * scale, groundY - 15 * scale, 12 * scale, 15 * scale);
+  ctx.fillStyle = '#3d2817';
+  ctx.fillRect(x - 8 * scale, groundY - 20 * scale, 16 * scale, 20 * scale);
 
-  // Tree layers
-  ctx.fillStyle = '#1a4d2e';
-  for (let layer = 0; layer < 3; layer++) {
-    const layerY = groundY - 15 * scale - layer * 25 * scale;
-    const layerWidth = (55 - layer * 12) * scale;
+  // Tree layers - darker green
+  for (let layer = 0; layer < 4; layer++) {
+    const layerY = groundY - 20 * scale - layer * 28 * scale;
+    const layerWidth = (65 - layer * 12) * scale;
+
+    // Shadow layer
+    ctx.fillStyle = '#0d2818';
     ctx.beginPath();
-    ctx.moveTo(x, layerY - 30 * scale);
+    ctx.moveTo(x, layerY - 35 * scale);
+    ctx.lineTo(x - layerWidth / 2 - 3, layerY + 3);
+    ctx.lineTo(x + layerWidth / 2 + 3, layerY + 3);
+    ctx.closePath();
+    ctx.fill();
+
+    // Main layer
+    ctx.fillStyle = '#1a4d2e';
+    ctx.beginPath();
+    ctx.moveTo(x, layerY - 35 * scale);
     ctx.lineTo(x - layerWidth / 2, layerY);
     ctx.lineTo(x + layerWidth / 2, layerY);
     ctx.closePath();
     ctx.fill();
   }
 
-  // Snow
+  // Snow on branches
   ctx.fillStyle = '#ffffff';
-  ctx.globalAlpha = 0.7;
-  for (let layer = 0; layer < 3; layer++) {
-    const layerY = groundY - 15 * scale - layer * 25 * scale;
-    const layerWidth = ((55 - layer * 12) * scale) * 0.5;
+  ctx.globalAlpha = 0.85;
+  for (let layer = 0; layer < 4; layer++) {
+    const layerY = groundY - 20 * scale - layer * 28 * scale;
+    const layerWidth = ((65 - layer * 12) * scale) * 0.4;
     ctx.beginPath();
-    ctx.ellipse(x, layerY - 25 * scale, layerWidth / 2, 5 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, layerY - 28 * scale, layerWidth / 2, 4 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
 
-  // Star
-  const starY = groundY - 15 * scale - 3 * 25 * scale - 10 * scale;
-  drawStar(ctx, x, starY, 10 * scale, 5, 0.5, '#f1c40f');
+  // Star on top
+  const starY = groundY - 20 * scale - 4 * 28 * scale - 8 * scale;
+  drawStar(ctx, x, starY, 12 * scale, 5, 0.5, '#d4af37');
 }
 
 function drawHolly(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number): void {
@@ -280,24 +349,40 @@ function drawHolly(ctx: CanvasRenderingContext2D, x: number, y: number, scale: n
   ctx.translate(x, y);
   ctx.scale(scale, scale);
 
-  // Leaves
-  ctx.fillStyle = '#27ae60';
+  // Leaves - darker green
+  ctx.fillStyle = '#1a6b35';
   for (let i = 0; i < 3; i++) {
-    const angle = (i - 1) * 0.5;
+    const angle = (i - 1) * 0.6;
     ctx.save();
     ctx.rotate(angle);
     ctx.beginPath();
-    ctx.ellipse(0, -12, 6, 14, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -14, 7, 16, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // Berries
+  // Berries - bright red
   ctx.fillStyle = '#c0392b';
   ctx.beginPath();
-  ctx.arc(-4, 0, 5, 0, Math.PI * 2);
-  ctx.arc(4, 0, 5, 0, Math.PI * 2);
-  ctx.arc(0, -4, 5, 0, Math.PI * 2);
+  ctx.arc(-5, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(5, 0, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, -5, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Berry highlights
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.beginPath();
+  ctx.arc(-3, -2, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7, -2, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(2, -7, 2, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();

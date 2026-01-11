@@ -30,12 +30,12 @@ const DEFAULT_CONFIG: GameEngineConfig = {
   canvasWidth: 800,
   canvasHeight: 400,
   groundLevel: 340,
-  initialSpeed: 4,
-  speedMultiplierPerLevel: 1.15,
+  initialSpeed: 5,
+  speedMultiplierPerLevel: 1.18,
   packagesPerLevel: 10,
   totalLevels: 5,
   baseX: 150,
-  levelTimeoutSeconds: 45,
+  levelTimeoutSeconds: 38,
   packagesLostOnHit: 1,
 };
 
